@@ -9,11 +9,13 @@ const config = {
     getImageUrl: (path) => {
         if (!path) return '';
         if (path.startsWith('http')) return path;
-        // Since we proxy /uploads, we can just return the path directly if it starts with /uploads
-        // But backend often saves as /uploads/..., so returning just path works with proxy.
-        // However, if we need absolute URL for some reason (rare in this setup), we'd need more logic.
-        // For now, returning the path works because <img src="/uploads/..." /> works via proxy.
-        return path;
+
+        // Ensure path starts with /
+        const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+
+        // In production (API_BASE_URL is set), prepend it.
+        // In dev (API_BASE_URL is empty), return relative path (handled by proxy).
+        return `${config.API_BASE_URL}${normalizedPath}`;
     },
     // Pagination Defaults
     DEFAULT_PAGINATION_LIMIT: 10,
