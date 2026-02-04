@@ -1,0 +1,59 @@
+-- 1. ตารางสินค้าหลัก (เก็บข้อมูลภาพรวม)
+CREATE TABLE products (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    title VARCHAR(255) NOT NULL COMMENT 'ชื่อสินค้า',
+    description TEXT COMMENT 'รายละเอียดสำหรับพนักงานอ่าน',
+    category VARCHAR(100) COMMENT 'หมวดหมู่ เช่น Charm, Necklace',
+    image_url VARCHAR(500) COMMENT 'รูปภาพหลัก',
+    status ENUM('active', 'inactive') DEFAULT 'active',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+
+-- 2. ตารางตัวเลือกสินค้า/SKU (เก็บสต็อกและราคา) *** หัวใจสำคัญ ***
+CREATE TABLE variants (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    product_id INT NOT NULL,
+    sku VARCHAR(100) NOT NULL UNIQUE COMMENT 'รหัสสินค้า (Short Code) ต้องตรงกับ TikTok',
+    option_name VARCHAR(100) COMMENT 'ชื่อตัวเลือก เช่น สีแดง, 16cm',
+    price DECIMAL(10, 2) NOT NULL DEFAULT 0.00 COMMENT 'ราคาขายหน้าร้าน',
+    default_cost DECIMAL(10, 2) DEFAULT 0.00 COMMENT 'ราคาทุนมาตรฐาน (ซ่อนจากพนักงาน)',
+    stock_qty INT DEFAULT 0 COMMENT 'จำนวนคงเหลือ',
+    is_bundle BOOLEAN DEFAULT FALSE COMMENT 'เป็นสินค้าเซตหรือไม่',
+    FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
+);
+
+-- 3. ตารางจับคู่สินค้าเซต (Bundle Logic)
+CREATE TABLE bundle_mapping (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    parent_variant_id INT NOT NULL COMMENT 'SKU ของสินค้าที่เป็นเซต',
+    child_variant_id INT NOT NULL COMMENT 'SKU ของสินค้าจริงที่ต้องตัดสต็อก',
+    quantity INT NOT NULL DEFAULT 1 COMMENT 'จำนวนที่ต้องตัด',
+    FOREIGN KEY (parent_variant_id) REFERENCES variants(id) ON DELETE CASCADE,
+    FOREIGN KEY (child_variant_id) REFERENCES variants(id) ON DELETE CASCADE
+);
+
+-- 4. ตารางใบรับสินค้าเข้า (Stock Request) - สำหรับพักข้อมูลรอแอดมินอนุมัติ
+CREATE TABLE stock_requests (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    request_no VARCHAR(50) NOT NULL UNIQUE COMMENT 'เลขที่เอกสารการรับของ',
+    requester_name VARCHAR(100) COMMENT 'ชื่อพนักงานที่ทำรายการ',
+    note TEXT COMMENT 'หมายเหตุเพิ่มเติม',
+    status ENUM('pending','waiting_for_approve','approved', 'cancelled') DEFAULT 'pending' COMMENT 'สถานะการอนุมัติ',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    approved_at TIMESTAMP NULL COMMENT 'วันที่แอดมินกดอนุมัติ'
+);
+
+-- 5. ตารางรายการสินค้าในใบรับ (Stock Request Items)
+CREATE TABLE stock_request_items (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    request_id INT NOT NULL,
+    variant_id INT NOT NULL,
+    quantity INT NOT NULL COMMENT 'จำนวนที่พนักงานนับได้',
+    cost_per_unit DECIMAL(10, 2) DEFAULT 0.00 COMMENT 'ต้นทุนต่อหน่วย (ระบบดึงมา Auto แอดมินแก้ได้)',
+    FOREIGN KEY (request_id) REFERENCES stock_requests(id) ON DELETE CASCADE,
+    FOREIGN KEY (variant_id) REFERENCES variants(id)
+);
+
+-- สร้าง Index เพื่อให้ค้นหาด้วย SKU ได้เร็วพุ่ง (สำคัญมากสำหรับระบบ Manual Search)
+CREATE INDEX idx_sku ON variants(sku);
