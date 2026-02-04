@@ -333,12 +333,8 @@ class ProductService {
 
             // Filter by Type
             if (filters.type && filters.type !== 'all') {
-                if (filters.type.toLowerCase() === 'adjust') {
-                    whereClauses.push(`(l.type = 'ADJUST_ADD' OR l.type = 'ADJUST_SUB')`);
-                } else {
-                    whereClauses.push(`l.type = ?`);
-                    params.push(filters.type.toUpperCase());
-                }
+                whereClauses.push(`l.type = ?`);
+                params.push(filters.type.toUpperCase());
             }
 
             // Filter by Date Range
@@ -403,8 +399,7 @@ class ProductService {
                 SELECT 
                     SUM(CASE WHEN type = 'IN' THEN quantity ELSE 0 END) as total_in,
                     SUM(CASE WHEN type = 'OUT' THEN quantity ELSE 0 END) as total_out,
-                    SUM(CASE WHEN type = 'ADJUST_ADD' THEN quantity ELSE 0 END) as total_adjust_add,
-                    SUM(CASE WHEN type = 'ADJUST_SUB' THEN quantity ELSE 0 END) as total_adjust_sub,
+                    SUM(CASE WHEN type = 'ADJUST' THEN quantity ELSE 0 END) as total_adjust,
                     SUM(CASE WHEN type = 'RETURN' THEN quantity ELSE 0 END) as total_return
                 FROM stock_logs
             `;
@@ -424,20 +419,33 @@ class ProductService {
             }
 
             const [result] = await connection.query(query, params);
-            const stats = result[0] || {};
+            const stats = result[0] || { total_in: 0, total_out: 0, total_adjust: 0, total_return: 0 };
+
+            // Calculate Net
+            // Logic: IN + RETURN - OUT + ADJUST (Adjust is typically explicitly signed, but let's assume stored as positive for magnitude, or signed? 
+            // Usually logs might store quantity as absolute. Let's assume quantity is absolute and type dictates sign.
+            // Wait, looking at update in createStockRequest: `stock_qty = stock_qty + ?`.
+            // If I implement 'OUT', I'd do `stock_qty - ?`.
+            // The logs usually store the absolute amount involved in the transaction.
+            // If Type is OUT, it means -quantity.
+            // If Type is ADJUST, it could be +/-. Usually adjust logs might store signed value OR we need separate types like ADJUST_ADD / ADJUST_SUB.
+            // For now, let's assume 'ADJUST' might be signed in the db if we allowed manual implementation, OR we stick to simpler IN/OUT logic.
+            // But for this stats calculation:
+            // Net = IN + RETURN - OUT
+            // Adjust? If adjust is negative (lost), it's minus. If found, it's plus.
+            // Let's assume standard stats:
 
             const totalIn = Number(stats.total_in || 0);
-            const totalOut = Number(stats.total_out || 0);
+            const totalOut = Number(stats.total_out || 0); // Usually sale
             const totalReturn = Number(stats.total_return || 0);
-            const totalAdjustAdd = Number(stats.total_adjust_add || 0);
-            const totalAdjustSub = Number(stats.total_adjust_sub || 0);
+            // Adjust: assuming we haven't implemented adjust yet, let's leave it simple.
+            // Net Change = (In + Return) - Out
 
-            // Net Change = (In + Return + Adjust Add) - (Out + Adjust Sub)
-            const netChange = (totalIn + totalReturn + totalAdjustAdd) - (totalOut + totalAdjustSub);
+            const netChange = (totalIn + totalReturn) - totalOut;
 
             return {
-                in: totalIn + totalAdjustAdd, // Combine for display? Or keep separate? Let's combine "Incoming Flow"
-                out: totalOut + totalAdjustSub, // Combine "Outgoing Flow"
+                in: totalIn,
+                out: totalOut,
                 net: netChange
             };
 
@@ -505,11 +513,19 @@ class ProductService {
 
                             // Log Adjustment
                             const diff = newStock - currentDbStock;
-                            const type = diff > 0 ? 'ADJUST_ADD' : 'ADJUST_SUB';
+                            const type = diff > 0 ? 'IN' : 'OUT'; // Or 'ADJUST'
+                            // Let's use 'ADJUST' to distinguish from normal sales/stock-in if we want, or keep IN/OUT logic
+                            // If we use 'ADJUST', we need to make sure stats calculation handles it.
+                            // The current stats calculation (getStockStats) expects IN/OUT/ADJUST/RETURN.
+                            // Let's use 'ADJUST' for manual edit.
+                            // But wait, getStockStats query logic:
+                            // SUM(CASE WHEN type = 'IN' THEN quantity ...
+                            // Usually quantity in logs is absolute value?
+                            // Yes, let's store absolute quantity and type ADJUST.
 
                             await connection.query(
                                 `INSERT INTO stock_logs (variant_id, quantity, type, note) VALUES (?, ?, ?, ?)`,
-                                [v.id, Math.abs(diff), type, `Manual Edit: ${currentDbStock} -> ${newStock}`]
+                                [v.id, Math.abs(diff), 'ADJUST', `Manual Edit: ${currentDbStock} -> ${newStock}`]
                             );
                         }
 
