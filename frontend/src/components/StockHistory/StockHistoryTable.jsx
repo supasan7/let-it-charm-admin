@@ -9,7 +9,8 @@ const StockHistoryTable = ({ logs, loading, pagination, onPageChange }) => {
         switch (type) {
             case 'IN': return <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">รับเข้า (Stock In)</span>;
             case 'OUT': return <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">ขายออก (Sale)</span>;
-            case 'ADJUST': return <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800">ปรับยอด (Adjust)</span>;
+            case 'ADJUST_ADD': return <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-teal-100 text-teal-800">ปรับเพิ่ม (Adj +)</span>;
+            case 'ADJUST_SUB': return <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800">ปรับลด (Adj -)</span>;
             case 'RETURN': return <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">รับคืน (Return)</span>;
             default: return <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">{type}</span>;
         }
@@ -19,10 +20,10 @@ const StockHistoryTable = ({ logs, loading, pagination, onPageChange }) => {
     const formatQty = (qty, type) => {
         let colorClass = 'text-slate-800';
         let prefix = '';
-        if (type === 'IN' || type === 'RETURN') {
+        if (type === 'IN' || type === 'RETURN' || type === 'ADJUST_ADD') {
             colorClass = 'text-green-600';
             prefix = '+';
-        } else if (type === 'OUT') {
+        } else if (type === 'OUT' || type === 'ADJUST_SUB') {
             colorClass = 'text-red-600';
             prefix = '-';
         } else if (type === 'ADJUST') {
